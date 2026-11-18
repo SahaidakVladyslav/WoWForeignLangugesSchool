@@ -1,0 +1,13 @@
+## Interface: 16001, 120105
+## Title: Dansk Trainer
+## Notes: Тренажер языков (DA, EN, RU, UK) с Knowledge Book и 2500 фраз
+## Author: You
+## Version: 0.6
+## SavedVariables: DanskTrainerDB_V5
+
+Locales.lua
+Phrases.lua
+UI.lua
+Wizard.lua
+KnowledgeBook.lua
+Core.lua
