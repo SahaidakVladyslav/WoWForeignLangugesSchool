@@ -126,7 +126,9 @@ function Core:PickNewPhrase()
         words = words,
         remainingWordIndices = indices,
         stage = "INTRO",
-        targetWordIndex = nil
+        targetWordIndex = nil,
+        wrongAttempts = 0,
+        usedHint = false,
     }
 end
 
@@ -152,7 +154,9 @@ function Core:TriggerPopup()
     local cur = self.db.current
     if not cur then return end
 
+    cur.wrongAttempts = cur.wrongAttempts or 0
     local s = ns.GetStrings(self.db.uiLang)
+    local canReveal = (cur.stage == "WORDS" or cur.stage == "FULL") and (cur.wrongAttempts >= 3)
 
     local baseOpts = {
         uiTitle = s.uiTitle,
@@ -161,6 +165,8 @@ function Core:TriggerPopup()
         btnSetup = s.btnSetup,
         btnNext = s.btnNext,
         btnGiveUp = s.btnGiveUp,
+        showReveal = canReveal,
+        btnReveal = (cur.stage == "FULL") and s.btnRevealFull or s.btnRevealWord,
     }
 
     if cur.stage == "INTRO" then
@@ -195,15 +201,33 @@ function Core:TriggerPopup()
     ns.UI:ShowExercise(baseOpts)
 end
 
+function Core:RevealCurrentAnswer()
+    local cur = self.db and self.db.current
+    if not cur then return end
+
+    local s = ns.GetStrings(self.db.uiLang)
+    cur.usedHint = true
+
+    if cur.stage == "WORDS" and cur.targetWordIndex then
+        local expectedWord = cur.words[cur.targetWordIndex]
+        ns.UI:SetInfo(string.format(s.revealWordText, expectedWord))
+    elseif cur.stage == "FULL" then
+        ns.UI:SetInfo(string.format(s.revealFullText, cur.targetText))
+    end
+end
+
 function Core:CheckAnswer(input)
     local cur = self.db.current
     if not cur then return end
 
     local s = ns.GetStrings(self.db.uiLang)
+    cur.wrongAttempts = cur.wrongAttempts or 0
 
     if cur.stage == "INTRO" then
         if Normalize(input) == Normalize(cur.targetText) then
             cur.stage = "WORDS"
+            cur.wrongAttempts = 0
+            cur.usedHint = false
             ns.UI:Hide()
             print(string.format("|cff00ff00[Dansk Trainer]|r " .. s.msgNextStep, self.db.intervalMinutes))
         else
@@ -215,33 +239,62 @@ function Core:CheckAnswer(input)
     if cur.stage == "WORDS" then
         local expected = cur.words[cur.targetWordIndex]
         if Normalize(input) == Normalize(expected) then
-            cur.targetWordIndex = nil
-            if #cur.remainingWordIndices > 0 then
-                cur.stage = "WORDS"
+            if cur.usedHint then
+                -- Повторяем этот же шаг без продвижения вперёд
+                cur.usedHint = false
+                cur.wrongAttempts = 0
+                ns.UI:Hide()
+                print(string.format("|cffffcc00[Dansk Trainer]|r " .. s.msgRepeatStep, self.db.intervalMinutes))
             else
-                cur.stage = "FULL"
+                cur.targetWordIndex = nil
+                cur.wrongAttempts = 0
+                cur.usedHint = false
+                if #cur.remainingWordIndices > 0 then
+                    cur.stage = "WORDS"
+                else
+                    cur.stage = "FULL"
+                end
+                ns.UI:Hide()
+                print(string.format("|cff00ff00[Dansk Trainer]|r " .. s.msgNextStep, self.db.intervalMinutes))
             end
-            ns.UI:Hide()
-            print(string.format("|cff00ff00[Dansk Trainer]|r " .. s.msgNextStep, self.db.intervalMinutes))
         else
-            ns.UI:SetError(string.format(s.errWrongWord, #expected))
+            cur.wrongAttempts = cur.wrongAttempts + 1
+            ns.UI:SetError(string.format(s.errWrongWord, math.min(3, cur.wrongAttempts), #expected))
+            if cur.wrongAttempts >= 3 then
+                self:TriggerPopup()
+                ns.UI:SetError(string.format(s.errWrongWord, 3, #expected))
+            end
         end
         return
     end
 
     if cur.stage == "FULL" then
         if Normalize(input) == Normalize(cur.targetText) then
-            local earned = cur.difficulty or 1
-            self.db.completedIds[cur.phraseId] = true
-            self.db.masteryPoints = (self.db.masteryPoints or 0) + earned
-            self.db.current = nil
-            ns.UI:Hide()
-            if ns.KB and ns.KB.Refresh then
-                ns.KB:Refresh()
+            if cur.usedHint then
+                -- Повторяем финальный шаг без засчитывания фразы
+                cur.usedHint = false
+                cur.wrongAttempts = 0
+                ns.UI:Hide()
+                print(string.format("|cffffcc00[Dansk Trainer]|r " .. s.msgRepeatStep, self.db.intervalMinutes))
+            else
+                local earned = cur.difficulty or 1
+                self.db.completedIds[cur.phraseId] = true
+                self.db.masteryPoints = (self.db.masteryPoints or 0) + earned
+                self.db.current = nil
+                cur.wrongAttempts = 0
+                ns.UI:Hide()
+                if ns.KB and ns.KB.Refresh then
+                    ns.KB:Refresh()
+                end
+                print(string.format("|cff00ff00[Dansk Trainer]|r " .. s.msgCompleted, earned, self.db.intervalMinutes))
             end
-            print(string.format("|cff00ff00[Dansk Trainer]|r " .. s.msgCompleted, earned, self.db.intervalMinutes))
         else
-            ns.UI:SetError(s.errWrongFull)
+            cur.wrongAttempts = cur.wrongAttempts + 1
+            ns.UI:SetError(string.format(s.errWrongFull, math.min(3, cur.wrongAttempts)))
+            if cur.wrongAttempts >= 3 then
+                self:TriggerPopup()
+                ns.UI:SetError(string.format(s.errWrongFull, 3))
+            end
         end
     end
 end

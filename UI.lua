@@ -7,7 +7,7 @@ function UI:Init()
     if self.frame then return end
 
     local frame = CreateFrame("Frame", "DanskTrainerMainFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(560, 305)
+    frame:SetSize(560, 325)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 50)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetBackdrop({
@@ -43,12 +43,18 @@ function UI:Init()
     feedbackText:SetPoint("TOP", editBox, "BOTTOM", 0, -8)
     feedbackText:SetWidth(500)
 
+    -- Кнопка показа слова/фразы (появляется после 3 ошибок)
+    local revealBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    revealBtn:SetSize(180, 24)
+    revealBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 65, 48)
+    revealBtn:Hide()
+
     -- Главная кнопка проверки ответа
     local submitBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     submitBtn:SetSize(210, 26)
     submitBtn:SetPoint("BOTTOM", frame, "BOTTOM", 0, 48)
 
-    -- Нижний ряд кнопок: Setup | Next | Give up (принципиально нерабочая)
+    -- Нижний ряд кнопок: Setup | Next | Give up
     local setupBtn = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     setupBtn:SetSize(120, 24)
     setupBtn:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 24, 16)
@@ -73,6 +79,12 @@ function UI:Init()
         self:SetFocus()
     end)
 
+    revealBtn:SetScript("OnClick", function()
+        if ns.Core and ns.Core.RevealCurrentAnswer then
+            ns.Core:RevealCurrentAnswer()
+        end
+    end)
+
     setupBtn:SetScript("OnClick", function()
         if ns.Core and ns.Core.OpenSetup then
             ns.Core:OpenSetup()
@@ -85,7 +97,6 @@ function UI:Init()
         end
     end)
 
-    -- Принципиально нерабочая кнопка отказа от учёбы
     giveUpBtn:SetScript("OnClick", function()
         if ns.Core and ns.Core.OnGiveUpClicked then
             ns.Core:OnGiveUpClicked()
@@ -99,6 +110,7 @@ function UI:Init()
     self.targetDisplay = targetDisplay
     self.editBox = editBox
     self.feedbackText = feedbackText
+    self.revealBtn = revealBtn
     self.submitBtn = submitBtn
     self.setupBtn = setupBtn
     self.nextBtn = nextBtn
@@ -117,12 +129,29 @@ function UI:ShowExercise(opts)
     self.giveUpBtn:SetText(opts.btnGiveUp)
     self.feedbackText:SetText("")
     self.editBox:SetText("")
+
+    if opts.showReveal then
+        self.revealBtn:SetText(opts.btnReveal or "Show answer")
+        self.revealBtn:Show()
+        self.submitBtn:ClearAllPoints()
+        self.submitBtn:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", -65, 48)
+    else
+        self.revealBtn:Hide()
+        self.submitBtn:ClearAllPoints()
+        self.submitBtn:SetPoint("BOTTOM", self.frame, "BOTTOM", 0, 48)
+    end
+
     self.frame:Show()
     self.editBox:SetFocus()
 end
 
 function UI:SetError(msg)
     self.feedbackText:SetText("|cffff4444" .. msg .. "|r")
+    self.editBox:SetFocus()
+end
+
+function UI:SetInfo(msg)
+    self.feedbackText:SetText(msg)
     self.editBox:SetFocus()
 end
 
